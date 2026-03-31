@@ -35,12 +35,7 @@ jobs:
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
         run: |
-          qs-agent --task "Review the changed files for security vulnerabilities, code quality issues, and bugs. Fix any issues found. Focus on:
-          - SQL injection, XSS, and other security vulnerabilities
-          - Hardcoded secrets or credentials
-          - Input validation issues
-          - Error handling improvements
-          - Code quality and best practices"
+          agent --print --force "Review the changed files for security vulnerabilities, code quality issues, and bugs. Fix any issues found. Focus on: SQL injection, XSS, hardcoded secrets, input validation, error handling, and code quality best practices."
 
       - name: Check for changes
         id: changes
