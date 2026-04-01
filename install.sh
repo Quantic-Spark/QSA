@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+VERSION="2026.03.30-a5d3e17"
 
 # Color support: check NO_COLOR or non-TTY (stdout)
 if [ -n "${NO_COLOR+x}" ] || [ ! -t 1 ]; then
   CYAN=''
   GREEN=''
-  YELLOW=''
   BLUE=''
-  PURPLE=''
   RED=''
   BOLD=''
   DIM=''
@@ -14,9 +15,7 @@ if [ -n "${NO_COLOR+x}" ] || [ ! -t 1 ]; then
 else
   CYAN='\033[0;36m'
   GREEN='\033[0;32m'
-  YELLOW='\033[0;33m'
   BLUE='\033[0;34m'
-  PURPLE='\033[0;35m'
   RED='\033[0;31m'
   BOLD='\033[1m'
   DIM='\033[2m'
@@ -35,8 +34,9 @@ print_step() {
 
 # Function to print success
 print_success() {
-    # Move cursor up one line and clear it
-    echo -ne "\033[1A\033[2K"
+    if [ -t 1 ]; then
+        echo -ne "\033[1A\033[2K"
+    fi
     echo -e "${GREEN}✓${NC} ${1}"
 }
 
@@ -74,15 +74,15 @@ print_success "Detected ${OS}/${ARCH}"
 
 # Installation steps
 print_step "Creating installation directory..."
-# Create temporary directory for atomic download inside versions folder
-TEMP_EXTRACT_DIR="$HOME/.local/share/cursor-agent/versions/.tmp-2026.03.30-a5d3e17-$(date +%s)"
-mkdir -p "${TEMP_EXTRACT_DIR}"
+VERSIONS_DIR="$HOME/.local/share/cursor-agent/versions"
+mkdir -p "${VERSIONS_DIR}"
+TEMP_EXTRACT_DIR="$(mktemp -d "${VERSIONS_DIR}/.tmp-${VERSION}.XXXXXXXXXX")"
 
 print_success "Directory created"
 
 
 print_step "Downloading Quantic Spark Agent package..."
-DOWNLOAD_URL="https://downloads.cursor.com/lab/2026.03.30-a5d3e17/${OS}/${ARCH}/agent-cli-package.tar.gz"
+DOWNLOAD_URL="https://downloads.cursor.com/lab/${VERSION}/${OS}/${ARCH}/agent-cli-package.tar.gz"
 echo -e "${DIM}  Download URL: ${DOWNLOAD_URL}${NC}"
 
 # Cleanup function
@@ -92,28 +92,28 @@ cleanup() {
 trap cleanup EXIT
 
 # Download with progress bar and better error handling
-if curl -fSL --progress-bar "${DOWNLOAD_URL}" \
+if curl --proto '=https' -fSL --progress-bar "${DOWNLOAD_URL}" \
   | tar --strip-components=1 -xzf - -C "${TEMP_EXTRACT_DIR}"; then
-  echo -ne "\033[1A\033[2K"
-  echo -ne "\033[1A\033[2K"
-  echo -ne "\033[1A\033[2K"
+  if [ -t 1 ]; then
+    echo -ne "\033[1A\033[2K"
+    echo -ne "\033[1A\033[2K"
+    echo -ne "\033[1A\033[2K"
+  fi
   print_success "Package downloaded and extracted"
 else
     print_error "Download failed. Please check your internet connection and try again."
     print_error "If the problem persists, the package might not be available for ${OS}/${ARCH}."
-    cleanup
     exit 1
 fi
 
 print_step "Finalizing installation..."
 # Atomically move from temp to final destination
-FINAL_DIR="$HOME/.local/share/cursor-agent/versions/2026.03.30-a5d3e17"
+FINAL_DIR="$HOME/.local/share/cursor-agent/versions/${VERSION}"
 command rm -rf "${FINAL_DIR}"
 if mv "${TEMP_EXTRACT_DIR}" "${FINAL_DIR}"; then
   print_success "Package installed successfully"
 else
     print_error "Failed to install package. Please check permissions."
-    cleanup
     exit 1
 fi
 
@@ -126,10 +126,9 @@ print_success "Bin directory ready"
 print_step "Creating symlinks to Quantic Spark Agent executable..."
 # Remove any existing symlink or file
 command rm -f ~/.local/bin/agent ~/.local/bin/cursor-agent ~/.local/bin/qs-agent
-# Create symlinks to the executable (primary: qs-agent, aliases: agent, cursor-agent)
-ln -s ~/.local/share/cursor-agent/versions/2026.03.30-a5d3e17/cursor-agent ~/.local/bin/qs-agent
-ln -s ~/.local/share/cursor-agent/versions/2026.03.30-a5d3e17/cursor-agent ~/.local/bin/agent
-ln -s ~/.local/share/cursor-agent/versions/2026.03.30-a5d3e17/cursor-agent ~/.local/bin/cursor-agent
+ln -s "${FINAL_DIR}/cursor-agent" ~/.local/bin/qs-agent
+ln -s "${FINAL_DIR}/cursor-agent" ~/.local/bin/agent
+ln -s "${FINAL_DIR}/cursor-agent" ~/.local/bin/cursor-agent
 print_success "Symlinks created"
 
 # Success message
@@ -145,7 +144,7 @@ if [[ ":${PATH}:" == *":${HOME}/.local/bin:"* ]]; then
   echo -e "   ${BOLD}qs-agent${NC}   ${DIM}(or: agent / cursor-agent)${NC}"
 else
   # Determine configured shells
-  CURRENT_SHELL="$(basename $SHELL)"
+  CURRENT_SHELL="$(basename "$SHELL")"
   SHOW_BASH=false
   SHOW_ZSH=false
   SHOW_FISH=false
